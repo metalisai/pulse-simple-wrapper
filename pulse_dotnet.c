@@ -258,7 +258,7 @@ struct pulse_dotnet_input_stream* pulse_dotnet_create_input_stream(struct pulse_
     }
 
     pa_buffer_attr buffer_attr;
-    buffer_attr.fragsize = (uint32_t)-1;
+    buffer_attr.fragsize = target_buffer_size;
     buffer_attr.maxlength = (uint32_t)-1;
     buffer_attr.minreq = (uint32_t)-1;
     buffer_attr.tlength = target_buffer_size;
@@ -273,7 +273,7 @@ struct pulse_dotnet_input_stream* pulse_dotnet_create_input_stream(struct pulse_
     pdn_input_stream->active = 1;
 
     pa_stream_set_read_callback(stream, stream_read_cb, pdn_input_stream);
-    if (pa_stream_connect_record(stream, source, &buffer_attr, 0) != 0)
+    if (pa_stream_connect_record(stream, source, &buffer_attr, PA_STREAM_ADJUST_LATENCY) != 0)
     {
         fprintf(stderr, "Failed to connect stream playback\n");
     }
@@ -285,7 +285,14 @@ struct pulse_dotnet_input_stream* pulse_dotnet_create_input_stream(struct pulse_
 void pulse_dotnet_destroy_stream(struct pulse_dotnet_ctx *ctx, struct pulse_dotnet_stream *stream)
 {
     pa_threaded_mainloop_lock(ctx->mainloop);
+    if (stream->active <= 0)
+    {
+        fprintf(stderr, "Trying to destroy an inactive stream");
+        return;
+    }
+
     stream->active = 0;
+    pa_stream_disconnect(stream->stream);
     pa_stream_drain(stream->stream, NULL, NULL);
     pa_stream_unref(stream->stream);
     pa_threaded_mainloop_unlock(ctx->mainloop);
@@ -294,7 +301,14 @@ void pulse_dotnet_destroy_stream(struct pulse_dotnet_ctx *ctx, struct pulse_dotn
 void pulse_dotnet_destroy_input_stream(struct pulse_dotnet_ctx *ctx, struct pulse_dotnet_input_stream *stream)
 {
     pa_threaded_mainloop_lock(ctx->mainloop);
+    if (stream->active <= 0)
+    {
+        fprintf(stderr, "Trying to destroy an inactive input stream");
+        return;
+    }
+
     stream->active = 0;
+    pa_stream_disconnect(stream->stream);
     pa_stream_drain(stream->stream, NULL, NULL);
     pa_stream_unref(stream->stream);
     pa_threaded_mainloop_unlock(ctx->mainloop);
